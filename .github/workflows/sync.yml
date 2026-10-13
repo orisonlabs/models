@@ -1,0 +1,39 @@
+# Keeps upstream/models.json a copy of router-for-me/models main and regenerates
+# models.json = upstream + overlay.json (upstream wins; overlay ids are a floor).
+# A push by this workflow's token starts no further run, so there is no loop.
+name: sync
+on:
+  schedule:
+    - cron: '23 */2 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [overlay.json, 'scripts/**', .github/workflows/sync.yml]
+permissions:
+  contents: write
+concurrency:
+  group: sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch upstream models.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/router-for-me/models/contents/models.json -H 'Accept: application/vnd.github.raw' > upstream/models.json
+          node -e "JSON.parse(require('node:fs').readFileSync('upstream/models.json', 'utf8'))"
+          echo "UPSTREAM_SHA=$(gh api repos/router-for-me/models/commits/main --jq '.sha[0:7]')" >> "$GITHUB_ENV"
+      - name: Test the merge
+        run: node --test scripts/merge.test.mjs
+      - name: Regenerate models.json
+        run: node scripts/merge.mjs upstream/models.json overlay.json models.json
+      - name: Commit when changed
+        run: |
+          git add upstream/models.json models.json
+          if git diff --cached --quiet; then echo "no change"; exit 0; fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -m "sync: upstream router-for-me/models ${UPSTREAM_SHA}"
+          git push

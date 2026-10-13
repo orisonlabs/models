@@ -1,0 +1,9 @@
+{
+  "name": "@orisonlabs/models",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test scripts/merge.test.mjs",
+    "merge": "node scripts/merge.mjs upstream/models.json overlay.json models.json"
+  }
+}
